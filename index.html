@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel de Motores</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1419; --card:#18202a; --line:#27323f; --txt:#e6edf3; --mut:#8b98a8;
+    --ok:#2ecc71; --off:#6b7785; --warn:#f5a623; --bad:#e5484d; --acc:#3b9eff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line)}
+  header h1{font-size:17px;margin:0}
+  header a{color:var(--txt);text-decoration:none}
+  header .user{color:var(--mut);font-size:13px;display:flex;gap:12px;align-items:center}
+  main{max-width:1100px;margin:0 auto;padding:20px}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--txt);border-radius:8px;padding:8px 14px}
+  button:hover{border-color:var(--acc)}
+  button:disabled{opacity:.45;cursor:not-allowed;border-color:var(--line)}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#04111f;font-weight:600}
+  button.on{background:var(--ok);border-color:var(--ok);color:#04150b;font-weight:600}
+  button.stop{background:var(--bad);border-color:var(--bad);color:#fff;font-weight:600}
+  input{font:inherit;background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px 12px;width:100%}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .grid{display:grid;gap:14px}
+  .tiles{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:14px}
+  .motors{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+  .tile .v{font-size:26px;font-weight:700}
+  .tile .l{color:var(--mut);font-size:13px}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 10px;border-radius:999px;background:#0000004d}
+  .badge i{width:8px;height:8px;border-radius:50%;background:var(--off)}
+  .badge.on i{background:var(--ok)} .badge.off i{background:var(--off)} .badge.offline i{background:var(--bad)}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .mut{color:var(--mut)} .small{font-size:13px}
+  .big{font-size:44px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+  .kv{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin-top:10px}
+  .kv span:nth-child(odd){color:var(--mut)}
+  .kv span:nth-child(even){text-align:right;font-variant-numeric:tabular-nums}
+  .actions{display:flex;gap:8px;margin-top:14px}
+  .actions button:first-child{flex:1}
+  .motor-link{color:var(--txt);text-decoration:none;font-weight:600;font-size:16px}
+  .motor-link:hover{color:var(--acc)}
+  .pending{color:var(--warn);font-size:13px;margin-top:8px}
+  .events{list-style:none;margin:10px 0 0;padding:0}
+  .events li{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+  h2{font-size:15px;margin:22px 0 10px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  #login{max-width:340px;margin:12vh auto;padding:0 20px}
+  #login .card{display:grid;gap:12px}
+  #login h1{margin:0 0 4px;font-size:20px}
+  .err{color:var(--bad);font-size:13px;min-height:18px}
+  dialog{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:12px;text-align:center}
+  dialog::backdrop{background:#000a}
+  #qrbox{background:#fff;padding:12px;border-radius:8px;display:inline-block;margin:12px 0}
+  .addform{display:grid;grid-template-columns:1fr 2fr auto;gap:8px}
+  @media(max-width:560px){.addform{grid-template-columns:1fr}.big{font-size:38px}}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login" hidden>
+  <form class="card" id="loginForm">
+    <h1>Painel de Motores</h1>
+    <input id="email" type="email" placeholder="E-mail" autocomplete="username" required>
+    <input id="pass" type="password" placeholder="Senha" autocomplete="current-password" required>
+    <div class="err" id="loginErr"></div>
+    <button class="primary" type="submit">Entrar</button>
+  </form>
+</div>
+
+<!-- APP -->
+<div id="app" hidden>
+  <header>
+    <h1><a href="./">⚙️ Painel de Motores</a></h1>
+    <div class="user"><span id="userEmail"></span><button id="logout">Sair</button></div>
+  </header>
+  <main id="view"></main>
+</div>
+
+<dialog id="qrDialog">
+  <h3 id="qrTitle" style="margin:0"></h3>
+  <div id="qrbox"></div>
+  <div class="small mut" id="qrUrl" style="max-width:260px;word-break:break-all"></div>
+  <div style="margin-top:14px"><button onclick="document.getElementById('qrDialog').close()">Fechar</button></div>
+</dialog>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getDatabase, ref, onValue, set, query, limitToLast }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+
+/* ====== 1) COLE AQUI A CONFIGURAÇÃO DO SEU PROJETO FIREBASE ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAS4RfwqRvNQ8B8BUntYpe-sixMGvvcOyE",
+  authDomain: "projetobagner.firebaseapp.com",
+  databaseURL: "https://projetobagner-default-rtdb.firebaseio.com",
+  projectId: "projetobagner",
+  appId: "1:192564847577:web:dee1ac8953805106c26fc8"
+};
+/* ================================================================== */
+
+const ONLINE_TIMEOUT_MS = 45000; // sem sinal do ESP32 por mais que isso = offline
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+
+const $ = (s) => document.querySelector(s);
+const motorId = new URLSearchParams(location.search).get("motor");
+let motors = {};
+let events = [];
+let chart = null;
+let unsubs = [];
+
+/* ---------- helpers ---------- */
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function fmt(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return `${h}h ${String(m).padStart(2,"0")}m ${String(s).padStart(2,"0")}s`;
+}
+const fmtDate = (ms) => ms ? new Date(ms).toLocaleString("pt-BR") : "—";
+const isOnline = (m) => m.lastSeen && (Date.now() - m.lastSeen) < ONLINE_TIMEOUT_MS;
+const sessionSecs = (m) => (m.state && m.runningSince) ? Math.max(0, (Date.now() - m.runningSince) / 1000) : 0;
+const totalSecs = (m) => (m.totalRunSeconds || 0) + sessionSecs(m);
+function status(m) {
+  if (!isOnline(m)) return { cls: "offline", txt: "Offline" };
+  return m.state ? { cls: "on", txt: "Ligado" } : { cls: "off", txt: "Desligado" };
+}
+const badge = (m) => { const s = status(m); return `<span class="badge ${s.cls}"><i></i>${s.txt}</span>`; };
+
+/* ---------- ações ---------- */
+window.toggleMotor = async (id) => {
+  const m = motors[id]; if (!m) return;
+  const next = !m.command;
+  if (!next || confirm(`Ligar o motor "${m.name || id}"?`)) {
+    await set(ref(db, `motors/${id}/command`), next);
+  }
+};
+window.showQR = (id) => {
+  const url = `${location.origin}${location.pathname}?motor=${encodeURIComponent(id)}`;
+  $("#qrTitle").textContent = motors[id]?.name || id;
+  $("#qrUrl").textContent = url;
+  $("#qrbox").innerHTML = "";
+  new QRCode($("#qrbox"), { text: url, width: 220, height: 220 });
+  $("#qrDialog").showModal();
+};
+window.addMotor = async (e) => {
+  e.preventDefault();
+  const id = $("#newId").value.trim();
+  const name = $("#newName").value.trim() || id;
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) return alert("ID: use só letras, números, - e _");
+  if (motors[id]) return alert("Já existe um motor com esse ID.");
+  await set(ref(db, `motors/${id}`), { name, command: false, state: false, totalRunSeconds: 0, startsCount: 0 });
+  e.target.reset();
+};
+
+/* ---------- renderização ---------- */
+function controlButton(id, m) {
+  const online = isOnline(m);
+  const cls = m.command ? "stop" : "on";
+  const label = m.command ? "Desligar motor" : "Ligar motor";
+  return `<button class="${cls}" ${online ? "" : "disabled"} onclick="toggleMotor('${esc(id)}')">${label}</button>`;
+}
+const pendingMsg = (m) => (isOnline(m) && !!m.command !== !!m.state)
+  ? `<div class="pending">⏳ Comando enviado, aguardando o ESP32 confirmar…</div>` : "";
+
+function renderDashboard() {
+  const ids = Object.keys(motors).sort();
+  const list = ids.map(id => ({ id, ...motors[id] }));
+  const running = list.filter(m => isOnline(m) && m.state).length;
+  const offline = list.filter(m => !isOnline(m)).length;
+  const hours = list.reduce((a, m) => a + totalSecs(m), 0) / 3600;
+
+  $("#view").innerHTML = `
+    <div class="grid tiles">
+      <div class="card tile"><div class="v">${list.length}</div><div class="l">Motores</div></div>
+      <div class="card tile"><div class="v" style="color:var(--ok)">${running}</div><div class="l">Ligados agora</div></div>
+      <div class="card tile"><div class="v" style="color:var(--bad)">${offline}</div><div class="l">Offline</div></div>
+      <div class="card tile"><div class="v" id="sumHours">${hours.toFixed(1)}h</div><div class="l">Horas acumuladas</div></div>
+    </div>
+
+    <div class="card"><div class="small mut" style="margin-bottom:8px">Horas de funcionamento por motor</div>
+      <div style="height:220px"><canvas id="chart"></canvas></div></div>
+
+    <h2>Motores</h2>
+    <div class="grid motors">
+      ${list.map(m => `
+        <div class="card">
+          <div class="row">
+            <a class="motor-link" href="?motor=${encodeURIComponent(m.id)}">${esc(m.name || m.id)}</a>
+            ${badge(m)}
+          </div>
+          <div class="mut small">${esc(m.id)}</div>
+          <div class="kv">
+            <span>Tempo nesta ligação</span><span data-session="${esc(m.id)}">${fmt(sessionSecs(m))}</span>
+            <span>Total acumulado</span><span data-total="${esc(m.id)}">${fmt(totalSecs(m))}</span>
+            <span>Partidas</span><span>${m.startsCount || 0}</span>
+          </div>
+          ${pendingMsg(m)}
+          <div class="actions">${controlButton(m.id, m)}<button onclick="showQR('${esc(m.id)}')" title="QR code">QR</button></div>
+        </div>`).join("") || `<div class="card mut">Nenhum motor cadastrado ainda. Adicione abaixo.</div>`}
+    </div>
+
+    <h2>Adicionar motor</h2>
+    <form class="card addform" onsubmit="addMotor(event)">
+      <input id="newId" placeholder="ID (ex: motor01)" required>
+      <input id="newName" placeholder="Nome (ex: Bomba do poço)">
+      <button class="primary" type="submit">Adicionar</button>
+    </form>`;
+
+  drawChart(list);
+}
+
+function drawChart(list) {
+  if (chart) { chart.destroy(); chart = null; }
+  const ctx = $("#chart"); if (!ctx || !window.Chart) return;
+  chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: list.map(m => m.name || m.id),
+      datasets: [{ data: list.map(m => +(totalSecs(m) / 3600).toFixed(2)), backgroundColor: "#3b9eff", borderRadius: 6 }]
+    },
+    options: {
+      maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.parsed.y} h` } } },
+      scales: {
+        x: { ticks: { color: "#8b98a8" }, grid: { display: false } },
+        y: { ticks: { color: "#8b98a8" }, grid: { color: "#27323f" }, title: { display: true, text: "horas", color: "#8b98a8" } }
+      }
+    }
+  });
+}
+
+function renderMotor() {
+  const m = motors[motorId];
+  if (!m) {
+    $("#view").innerHTML = `<a href="./" class="mut">← Painel</a>
+      <div class="card" style="margin-top:12px">Motor <b>${esc(motorId)}</b> não encontrado.</div>`;
+    return;
+  }
+  $("#view").innerHTML = `
+    <a href="./" class="mut small">← Painel</a>
+    <div class="row" style="margin:10px 0 14px">
+      <div><h1 style="margin:0;font-size:24px">${esc(m.name || motorId)}</h1><div class="mut small">ID: ${esc(motorId)}</div></div>
+      ${badge(m)}
+    </div>
+
+    <div class="card">
+      <div class="mut small">Tempo girando nesta ligação</div>
+      <div class="big" data-session="${esc(motorId)}">${fmt(sessionSecs(m))}</div>
+      ${pendingMsg(m)}
+      <div class="actions">${controlButton(motorId, m)}<button onclick="showQR('${esc(motorId)}')">QR</button></div>
+      ${isOnline(m) ? "" : `<div class="pending">O ESP32 está offline — o controle remoto está desativado.</div>`}
+    </div>
+
+    <h2>Dados</h2>
+    <div class="card"><div class="kv" style="margin:0">
+      <span>Total acumulado</span><span data-total="${esc(motorId)}">${fmt(totalSecs(m))}</span>
+      <span>Partidas</span><span>${m.startsCount || 0}</span>
+      <span>Última ligação</span><span>${fmtDate(m.runningSince)}</span>
+      <span>Último sinal do ESP32</span><span>${fmtDate(m.lastSeen)}</span>
+      <span>Sinal Wi-Fi</span><span>${m.rssi != null ? m.rssi + " dBm" : "—"}</span>
+      <span>IP</span><span>${esc(m.ip || "—")}</span>
+    </div></div>
+
+    <h2>Histórico recente</h2>
+    <div class="card"><ul class="events">
+      ${events.slice().reverse().map(e => `<li><span>${e.type === "on" ? "🟢 Ligado" : "⚪ Desligado"}${e.by ? ` <span class="mut small">(${esc(e.by)})</span>` : ""}</span><span class="mut">${fmtDate(e.t)}</span></li>`).join("")
+        || `<li class="mut">Sem eventos registrados.</li>`}
+    </ul></div>`;
+}
+
+const render = () => motorId ? renderMotor() : renderDashboard();
+
+/* atualiza cronômetros a cada segundo sem redesenhar a tela */
+setInterval(() => {
+  document.querySelectorAll("[data-session]").forEach(el => {
+    const m = motors[el.dataset.session]; if (m) el.textContent = fmt(sessionSecs(m));
+  });
+  document.querySelectorAll("[data-total]").forEach(el => {
+    const m = motors[el.dataset.total]; if (m) el.textContent = fmt(totalSecs(m));
+  });
+}, 1000);
+/* reavalia online/offline a cada 15 s */
+setInterval(() => { if (!$("#app").hidden && !$("#qrDialog").open) render(); }, 15000);
+
+/* ---------- auth + dados ---------- */
+function subscribe() {
+  unsubs.push(onValue(ref(db, "motors"), (snap) => { motors = snap.val() || {}; if (!$("#qrDialog").open) render(); }));
+  if (motorId) {
+    unsubs.push(onValue(query(ref(db, `motors/${motorId}/events`), limitToLast(20)), (snap) => {
+      const v = snap.val() || {};
+      events = Object.values(v).sort((a, b) => a.t - b.t);
+      render();
+    }));
+  }
+}
+
+onAuthStateChanged(auth, (user) => {
+  unsubs.forEach(u => u()); unsubs = [];
+  if (user) {
+    $("#login").hidden = true; $("#app").hidden = false;
+    $("#userEmail").textContent = user.email;
+    subscribe();
+  } else {
+    $("#app").hidden = true; $("#login").hidden = false;
+  }
+});
+
+$("#loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault(); $("#loginErr").textContent = "";
+  try { await signInWithEmailAndPassword(auth, $("#email").value, $("#pass").value); }
+  catch { $("#loginErr").textContent = "E-mail ou senha incorretos."; }
+});
+$("#logout").addEventListener("click", () => signOut(auth));
+</script>
+</body>
+</html>
